@@ -38,6 +38,7 @@ export const handler = async (event: { code: string }) => {
         accessToken: { S: access_token },
         refreshToken: { S: refresh_token },
         expiresIn: { N: (Date.now() + expires_in * 1000).toString() },
+        expiresAt: { N: Math.floor(Date.now() / 1000) + expires_in }, // TTL attribute (Unix timestamp in seconds)
       },
     });
 

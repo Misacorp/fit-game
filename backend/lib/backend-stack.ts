@@ -13,7 +13,9 @@ export class BackendStack extends cdk.Stack {
     const authTable = new dynamodb.Table(this, "AuthTable", {
       partitionKey: { name: "userId", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // TODO: Change to RETAIN for production
+      timeToLiveAttribute: "expiresAt", // Specify TTL attribute
     });
 
     // Lambda for initiating OAuth flow
