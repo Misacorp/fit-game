@@ -1,22 +1,37 @@
+import { google } from "googleapis";
 import { APIGatewayEvent } from "aws-lambda";
+import { getGoogleSecrets } from "../common/getGoogleSecrets";
 
 export const handler = async (_event: APIGatewayEvent) => {
-  const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-  const clientId = process.env.GOOGLE_CLIENT_ID!;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI!;
-  const scope = "https://www.googleapis.com/auth/fitness.activity.read";
-  const state = "random-state"; // TODO: Replace with a securely generated state if needed.
+  const { clientId, clientSecret, redirectUri } = await getGoogleSecrets({
+    clientIdSecretArn: process.env.GOOGLE_CLIENT_ID_SECRET_ARN,
+    clientSecretSecretArn: process.env.GOOGLE_CLIENT_SECRET_SECRET_ARN,
+    redirectUriSecretArn: process.env.GOOGLE_REDIRECT_URI_SECRET_ARN,
+  });
 
-  // Generate OAuth URL
-  const authUrl = `${GOOGLE_AUTH_URL}?response_type=code&client_id=${encodeURIComponent(
+  const oauth2Client = new google.auth.OAuth2(
     clientId,
-  )}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(
-    scope,
-  )}&state=${state}`;
+    clientSecret,
+    redirectUri,
+  );
+
+  const scopes = [
+    "openid",
+    "https://www.googleapis.com/auth/fitness.activity.read",
+  ];
+
+  const url = oauth2Client.generateAuthUrl({
+    scope: scopes,
+    access_type: "offline",
+    prompt: "consent",
+  });
+
+  console.log("Generated auth url", url);
 
   return {
-    statusCode: 200,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ authUrl }),
+    statusCode: 302,
+    headers: {
+      Location: url,
+    },
   };
 };

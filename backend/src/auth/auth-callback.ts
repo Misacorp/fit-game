@@ -1,10 +1,15 @@
+import { decode } from "jsonwebtoken";
 import axios from "axios";
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+import { getGoogleSecrets } from "../common/getGoogleSecrets";
 
 const dynamo = new DynamoDBClient({ region: process.env.AWS_REGION! });
 
-export const handler = async (event: { code: string }) => {
-  const code = event.code;
+export const handler = async (event: {
+  queryStringParameters: { code?: string };
+}) => {
+  console.debug("event", event);
+  const code = event.queryStringParameters?.code;
   if (!code) {
     return {
       statusCode: 400,
@@ -13,9 +18,12 @@ export const handler = async (event: { code: string }) => {
   }
 
   const tokenUrl = "https://oauth2.googleapis.com/token";
-  const clientId = process.env.GOOGLE_CLIENT_ID!;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI!;
+
+  const { clientId, clientSecret, redirectUri } = await getGoogleSecrets({
+    clientIdSecretArn: process.env.GOOGLE_CLIENT_ID_SECRET_ARN,
+    clientSecretSecretArn: process.env.GOOGLE_CLIENT_SECRET_SECRET_ARN,
+    redirectUriSecretArn: process.env.GOOGLE_REDIRECT_URI_SECRET_ARN,
+  });
 
   try {
     // Exchange authorization code for tokens
@@ -27,10 +35,27 @@ export const handler = async (event: { code: string }) => {
       grant_type: "authorization_code",
     });
 
-    const { access_token, refresh_token, expires_in } = response.data;
+    const responseData = response.data;
+
+    console.log(
+      "Response data (contains sensitive data so please delete these logs",
+      responseData,
+    );
+
+    const { access_token, refresh_token, expires_in, id_token } = responseData;
+
+    // Decode the ID token to extract user information
+
+    const decodedToken = decode(id_token);
+    const userId = decodedToken?.sub; // The unique identifier for the user
+    console.log("User ID:", userId, typeof userId);
+
+    if (!userId || typeof userId !== "string") {
+      // TODO: Write logic to return more detailed erroneous responses
+      throw new Error("User ID not found in ID token");
+    }
 
     // Save tokens in DynamoDB
-    const userId = "example-user-id"; // TODO: Replace with actual user identification logic
     const params = new PutItemCommand({
       TableName: process.env.DYNAMO_TABLE_NAME!,
       Item: {
@@ -38,24 +63,38 @@ export const handler = async (event: { code: string }) => {
         accessToken: { S: access_token },
         refreshToken: { S: refresh_token },
         expiresIn: { N: (Date.now() + expires_in * 1000).toString() },
-        expiresAt: { N: Math.floor(Date.now() / 1000) + expires_in }, // TTL attribute (Unix timestamp in seconds)
+        expiresAt: {
+          N: (Math.floor(Date.now() / 1000) + expires_in).toString(), // TTL attribute (Unix timestamp in seconds)
+        },
       },
     });
 
-    await dynamo.send(params);
+    console.log("Sending PutItemCommand to DynamoDB", params);
+
+    const ddbWriteResponse = await dynamo.send(params);
+
+    console.log("DynamoDB response", ddbWriteResponse);
 
     return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "Authorization successful" }),
+      statusCode: 302,
+      headers: {
+        "Set-Cookie": `id_token=${id_token}; HttpOnly; Secure; SameSite=None`,
+        Location: "https://localhost:3000/auth-success",
+      },
     };
   } catch (error) {
-    console.error("Error exchanging code or storing tokens:", error);
+    console.error("Error processing callback:", error);
+    let errorUrl = "https://localhost:3000/auth-error"; // Redirect to error page
+
+    if (error instanceof Error) {
+      errorUrl = `${errorUrl}?error=${encodeURIComponent(error.message)}`;
+    }
+
     return {
-      statusCode: 500,
-      body: JSON.stringify({
-        error: "Failed to process authorization callback",
-      }),
+      statusCode: 302,
+      headers: {
+        Location: errorUrl,
+      },
     };
   }
 };

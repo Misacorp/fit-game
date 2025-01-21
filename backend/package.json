@@ -12,8 +12,11 @@
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "22.7.9",
     "aws-cdk": "2.175.1",
+    "aws-cdk-lib": "2.176.0",
+    "constructs": "^10.0.0",
     "esbuild": "^0.24.2",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^9.1.0",
@@ -26,9 +29,12 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.726.1",
+    "@aws-sdk/client-secrets-manager": "^3.726.1",
     "@types/aws-lambda": "^8.10.147",
-    "aws-cdk-lib": "2.175.1",
     "axios": "^1.7.9",
-    "constructs": "^10.0.0"
+    "cookie": "^1.0.2",
+    "google-auth-library": "^9.15.0",
+    "googleapis": "^144.0.0",
+    "jsonwebtoken": "^9.0.2"
   }
 }
